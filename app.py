@@ -90,6 +90,11 @@ def estimate_cost(
     return concrete_cost, fee
 
 
+def check_working_time(available_minutes: float, pour_duration_minutes: float) -> tuple[bool, float]:
+    remaining = available_minutes - pour_duration_minutes
+    return remaining >= 0, remaining if remaining >= 0 else abs(remaining)
+
+
 def format_duration(total_minutes: float) -> str:
     rounded = max(0, round(total_minutes))
     if rounded < 60:
@@ -882,17 +887,16 @@ class ConcretePourApp(tk.Tk):
                 text="Correct the available working time to check this pour."
             )
             return
-        remaining = available - pour_duration_minutes
-        if remaining >= 0:
+        within_time, difference = check_working_time(available, pour_duration_minutes)
+        if within_time:
             self.set_time_status.configure(
                 text=f"Expected to finish within the available time; "
-                     f"{remaining:,.2f}".rstrip("0").rstrip(".") + " min remaining."
+                     f"{difference:,.2f}".rstrip("0").rstrip(".") + " min remaining."
             )
         else:
-            overrun = abs(remaining)
             self.set_time_status.configure(
                 text=f"Expected to exceed the available time by "
-                     f"{overrun:,.2f}".rstrip("0").rstrip(".") + " min."
+                     f"{difference:,.2f}".rstrip("0").rstrip(".") + " min."
             )
         self.set_time_status.configure(text=self.set_time_status.cget("text") +
                                        "\nThis status is an estimate, not a guarantee.")
