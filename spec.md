@@ -291,6 +291,44 @@ Include a **Copy** button that copies the text to the system clipboard.
 - Opening a saved project must restore every saved input and the active slab outline or typed shape.
 - Invalid, unsupported, or corrupted project files must show an error and leave the current project unchanged.
 
+## Export Results
+
+- Provide an **Export Results** button in the order summary area.
+- Export a CSV file that can be opened directly in Microsoft Excel or another spreadsheet application.
+- Use UTF-8 CSV encoding with a standard header row.
+- Export when all required pour inputs are valid and calculated results are available.
+- Disable the button while core inputs are invalid.
+- Include project and input values that are available:
+  - Slab mode
+  - Length and width
+  - Slab thickness
+  - Concrete mix name or designation
+  - Waste allowance
+  - Truck capacity
+  - One-way travel
+  - Placement rate
+  - Washout and reload
+  - First-truck arrival
+  - Concrete price and short-load fee
+  - Available working time
+- Include the completed slab area and geographic outline corners when available.
+- Include calculated concrete quantities:
+  - Unwasted volume
+  - Volume with waste
+  - Ordered volume
+  - Truckloads
+  - Final load size
+  - Trucks in rotation
+- Include truck calculations:
+  - Full-truck unload time
+  - Round trip
+  - Pour duration
+  - Finish time
+  - Truck spacing
+  - Arrival time and assigned truck for every load
+- Include concrete cost and set-time results when their inputs are valid.
+- Use the app's actual unrounded calculations for derived values, with practical display precision.
+
 ## Cost Estimator
 
 The concrete cost estimator is included; all other cost modeling is outside scope.

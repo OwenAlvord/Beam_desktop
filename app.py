@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import json
+import csv
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from typing import Callable, Optional
@@ -116,6 +117,72 @@ def deserialize_project(text: str) -> dict:
     if project.get("mode") not in ("typed", "draw"):
         raise ValueError("Project slab mode is invalid.")
     return project
+
+
+def build_export_rows(
+    project: dict,
+    slab_area: Optional[float] = None,
+    calculation: Optional[dict] = None,
+) -> list[tuple[str, str, str, str]]:
+    rows: list[tuple[str, str, str, str]] = []
+    inputs = project.get("inputs", {})
+    rows.append(("Project", "Slab mode", str(project.get("mode", "")), ""))
+    input_fields = [
+        ("Length", "length", "ft"),
+        ("Width", "width", "ft"),
+        ("Slab thickness", "thickness", "in"),
+        ("Concrete mix", "mix", ""),
+        ("Waste allowance", "waste", "%"),
+        ("Truck capacity", "capacity", "cy"),
+        ("Concrete price", "price", "USD/cy"),
+        ("Short-load fee", "fee", "USD"),
+        ("One-way travel", "travel", "min"),
+        ("Placement rate", "placement", "cy/hr"),
+        ("Available working time", "available", "min"),
+        ("Washout and reload", "washout", "min"),
+        ("First truck arrival", "arrival", "clock time"),
+    ]
+    for label, key, unit in input_fields:
+        if key in inputs:
+            rows.append(("Inputs", label, str(inputs[key]), unit))
+    if slab_area is not None:
+        rows.append(("Slab", "Calculated area", f"{slab_area:.6g}", "ft²"))
+    for index, corner in enumerate(project.get("completed_corners", []), start=1):
+        rows.append(("Slab outline", f"Corner {index} latitude", f"{float(corner[0]):.8f}", "degrees"))
+        rows.append(("Slab outline", f"Corner {index} longitude", f"{float(corner[1]):.8f}", "degrees"))
+    if calculation:
+        calculated_fields = [
+            ("Unwasted volume", "unwasted_volume", "cy"),
+            ("Volume with waste", "volume_with_waste", "cy"),
+            ("Concrete to order", "ordered_volume", "cy"),
+            ("Truckloads", "truckloads", "loads"),
+            ("Trucks in rotation", "trucks_in_rotation", "trucks"),
+            ("Full-truck unload time", "full_unload_minutes", "min"),
+            ("Round trip", "round_trip_minutes", "min"),
+            ("Pour duration", "pour_duration_minutes", "min"),
+            ("Finish time", "finish_minutes", "clock time"),
+            ("Final load size", "final_load_size", "cy"),
+        ]
+        for label, key, unit in calculated_fields:
+            if key not in calculation:
+                continue
+            value = calculation[key]
+            if key == "finish_minutes":
+                text = format_clock_time(float(value))
+            elif key in ("unwasted_volume", "volume_with_waste", "ordered_volume", "final_load_size"):
+                text = f"{float(value):.2f}" if key != "ordered_volume" else f"{float(value):.1f}"
+            elif key in ("truckloads", "trucks_in_rotation"):
+                text = str(int(value))
+            else:
+                text = f"{float(value):.6g}"
+            rows.append(("Calculated", label, text, unit))
+        for index, load_size in enumerate(calculation.get("load_sizes", []), start=1):
+            truck = ((index - 1) % int(calculation["trucks_in_rotation"])) + 1
+            load_type = "final partial" if index == len(calculation["load_sizes"]) and load_size < float(inputs.get("capacity", "inf")) else "full"
+            rows.append(("Truck loads", f"Load {index}", f"{float(load_size):.6g}", "cy"))
+            rows.append(("Truck loads", f"Load {index} assigned truck", str(truck), "truck"))
+            rows.append(("Truck loads", f"Load {index} type", load_type, ""))
+    return rows
 
 
 def format_duration(total_minutes: float) -> str:
@@ -518,6 +585,10 @@ class ConcretePourApp(tk.Tk):
         self.copy_button = ttk.Button(action, text="Copy", style="Accent.TButton",
                                       command=self.copy_order)
         self.copy_button.pack(side="left")
+        self.export_button = ttk.Button(action, text="Export Results", style="Secondary.TButton",
+                                        command=self.export_results)
+        self.export_button.pack(side="left", padx=(8, 0))
+        self.export_button.configure(state="disabled")
         self.copy_status = tk.Label(action, text="", background="#ffffff",
                                     foreground=MUTED, font=("Segoe UI", 9))
         self.copy_status.pack(side="left", padx=(10, 0))
@@ -948,6 +1019,7 @@ class ConcretePourApp(tk.Tk):
         self.order_text.insert("1.0", "Correct invalid inputs to generate the order.")
         self.order_text.configure(state="disabled")
         self.copy_button.configure(state="disabled")
+        self.export_button.configure(state="disabled")
         self.copy_status.configure(text="")
         self.cost_total.configure(text="—")
         self.cost_breakdown.configure(text="Enter valid slab and pour inputs to estimate cost.")
@@ -1153,6 +1225,7 @@ class ConcretePourApp(tk.Tk):
         self.order_text.insert("1.0", text)
         self.order_text.configure(state="disabled")
         self.copy_button.configure(state="normal")
+        self.export_button.configure(state="normal")
         self.copy_status.configure(text="")
 
     def copy_order(self) -> None:
@@ -1168,6 +1241,85 @@ class ConcretePourApp(tk.Tk):
         else:
             self.copy_status.configure(text="Copied.")
             self.after(2500, lambda: self.copy_status.configure(text=""))
+
+    def export_results(self) -> None:
+        if not self.current_calculation:
+            self.copy_status.configure(text="Correct invalid inputs before exporting.")
+            return
+        path = filedialog.asksaveasfilename(
+            title="Export Concrete Pour Results",
+            defaultextension=".csv",
+            filetypes=[("Excel CSV", "*.csv"), ("CSV file", "*.csv"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+
+        project = self._get_project_data()
+        rows = build_export_rows(project, self.current_slab_area, self.current_calculation)
+
+        price_raw = self.inputs["price"].get().strip()
+        fee_raw = self.inputs["fee"].get().strip()
+        try:
+            price = float(price_raw) if price_raw else None
+            fee = float(fee_raw) if fee_raw else 0.0
+        except ValueError:
+            price, fee = None, 0.0
+        if price is not None and math.isfinite(price) and price >= 0 and math.isfinite(fee) and fee >= 0:
+            concrete_cost, applicable_fee = estimate_cost(
+                self.current_calculation["ordered_volume"],
+                price,
+                fee,
+                self.current_calculation["final_load_size"],
+                self.parse_positive("capacity"),
+            )
+            rows.append(("Cost", "Concrete cost", f"{concrete_cost:.2f}", "USD"))
+            rows.append(("Cost", "Short-load fee", f"{applicable_fee:.2f}", "USD"))
+            rows.append(("Cost", "Estimated total", f"{concrete_cost + applicable_fee:.2f}", "USD"))
+
+        available_raw = self.inputs["available"].get().strip()
+        if available_raw:
+            try:
+                available = float(available_raw)
+            except ValueError:
+                available = None
+            if available is not None and math.isfinite(available) and available > 0:
+                within, difference = check_working_time(
+                    available, self.current_calculation["pour_duration_minutes"]
+                )
+                status = "Within time" if within else "Exceeds available time"
+                rows.append(("Set-time check", "Status", status, ""))
+                rows.append(("Set-time check",
+                             "Remaining or overrun",
+                             f"{difference:.6g}",
+                             "min"))
+
+        arrival = self.parse_arrival()
+        if arrival is not None:
+            rows.append(("Truck schedule", "Truck spacing",
+                         f"{self.current_calculation['full_unload_minutes']:.6g}", "min"))
+            for index in range(self.current_calculation["truckloads"]):
+                arrival_offset = index * self.current_calculation["full_unload_minutes"]
+                truck = (index % self.current_calculation["trucks_in_rotation"]) + 1
+                rows.append(("Truck schedule",
+                             f"Load {index + 1} arrival",
+                             format_schedule_time(arrival + arrival_offset),
+                             "clock time"))
+                rows.append(("Truck schedule",
+                             f"Load {index + 1} truck",
+                             str(truck),
+                             "truck"))
+
+        try:
+            with open(path, "w", encoding="utf-8-sig", newline="") as csv_file:
+                writer = csv.writer(csv_file)
+                writer.writerow(["Section", "Field", "Value", "Unit"])
+                writer.writerows(rows)
+        except (OSError, csv.Error) as error:
+            messagebox.showerror("Export Failed",
+                                 f"The results could not be exported.\n\n{error}")
+            return
+        self.copy_status.configure(text="Results exported.")
+        self.after(2500, lambda: self.copy_status.configure(text=""))
 
     def render_timeline(self, calculation: dict) -> None:
         canvas = self.timeline_canvas

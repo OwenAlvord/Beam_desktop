@@ -2,6 +2,8 @@ import unittest
 import json
 import tempfile
 import os
+import io
+import csv
 
 from app import (
     geographic_area,
@@ -13,6 +15,7 @@ from app import (
     format_schedule_time,
     serialize_project,
     deserialize_project,
+    build_export_rows,
 )
 
 
@@ -205,6 +208,43 @@ class CalculationTests(unittest.TestCase):
                 "version": 1,
                 "mode": "typed",
             }))
+
+    def test_export_rows_use_actual_calculation_values(self):
+        calculation = calculate_pour(
+            area=2400, thickness=6, waste=5, truck_capacity=10,
+            one_way_travel=20, placement_rate=30, washout=10, arrival_minutes=420,
+        )
+        project = {
+            "mode": "typed",
+            "inputs": {
+                "length": "40",
+                "width": "60",
+                "thickness": "6",
+                "mix": "4000 psi",
+                "waste": "5",
+                "capacity": "10",
+                "price": "150",
+                "fee": "75",
+                "travel": "20",
+                "placement": "30",
+                "available": "100",
+                "washout": "10",
+                "arrival": "07:00",
+            },
+            "completed_corners": [],
+        }
+        rows = build_export_rows(project, 2400.0, calculation)
+        text = io.StringIO(newline="")
+        writer = csv.writer(text)
+        writer.writerow(["Section", "Field", "Value", "Unit"])
+        writer.writerows(rows)
+        csv_text = text.getvalue()
+
+        self.assertIn("Concrete to order,47.0,cy", csv_text)
+        self.assertIn("Truckloads,5,loads", csv_text)
+        self.assertIn("Trucks in rotation,4,trucks", csv_text)
+        self.assertIn("Final load size,7.00,cy", csv_text)
+        self.assertIn("4000 psi", csv_text)
 
 
 if __name__ == "__main__":

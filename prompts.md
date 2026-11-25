@@ -21,3 +21,9 @@
 - Asked: Add Save and Open to the Concrete Pour Planner desktop app using a File menu, remove saving restrictions from spec.md, save all project inputs including mix and shape, restore saved projects, and rerun validation cases.
 - Changed: Added a File menu with Save/Open and Ctrl+S/Ctrl+O actions, JSON .cppj project serialization and validation, a concrete mix input, project restore for all input fields and slab mode/outline/map/window settings, and project save/open round-trip tests. Updated spec.md to document project saving and remove saving from Out of Scope.
 - Worked: Yes. Ten tests pass, including project round-trip and format validation, syntax checks pass, and a real app-instance smoke check restored mix, dimensions, typed mode, and recalculated output correctly.
+
+## 2026-11-24
+
+- Asked: Add an Export Results button that creates an Excel-friendly CSV containing project dimensions and actual concrete/truck calculations, without changing existing calculations, then rerun all validation cases.
+- Changed: Added a pure CSV export row builder, UTF-8 CSV file writing, an Export Results button, export disablement for invalid calculations, Excel-friendly headers and units, concrete/truck/load/schedule/cost/set-time output fields, and export coverage in test_app.py. Updated spec.md with Export Results requirements.
+- Worked: Yes. All 11 tests pass, syntax checks pass, and an app-instance smoke check showed Export enabled for 47.0 cy / 5 loads and disabled after a core input became invalid.
