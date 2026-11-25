@@ -27,3 +27,9 @@
 - Asked: Add an Export Results button that creates an Excel-friendly CSV containing project dimensions and actual concrete/truck calculations, without changing existing calculations, then rerun all validation cases.
 - Changed: Added a pure CSV export row builder, UTF-8 CSV file writing, an Export Results button, export disablement for invalid calculations, Excel-friendly headers and units, concrete/truck/load/schedule/cost/set-time output fields, and export coverage in test_app.py. Updated spec.md with Export Results requirements.
 - Worked: Yes. All 11 tests pass, syntax checks pass, and an app-instance smoke check showed Export enabled for 47.0 cy / 5 loads and disabled after a core input became invalid.
+
+## 2026-11-24
+
+- Asked: Create a short README.md for the Concrete Pour Planner desktop app with its purpose, package requirements, and run command.
+- Changed: Added README.md and added numpy and matplotlib to requirements.txt alongside tkintermapview.
+- Worked: Yes. The README documents installation and launch, and requirements.txt includes the requested packages.
