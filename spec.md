@@ -96,6 +96,7 @@ All numeric inputs permit decimal values unless stated otherwise.
 | Input | Default | Validation |
 | --- | ---: | --- |
 | Slab thickness | `6` inches | Finite decimal greater than `0` |
+| Concrete mix | Blank | Optional text name or designation |
 | Waste allowance | `5` percent | Finite decimal greater than or equal to `0`; no upper limit |
 | Truck capacity | `10` cubic yards | Finite decimal greater than `0` |
 | One-way travel time | `20` minutes | Finite decimal greater than `0` |
@@ -264,6 +265,31 @@ Include a **Copy** button that copies the text to the system clipboard.
 
 - On success, briefly show **Copied**.
 - If clipboard access fails, keep the text visible and report that automatic copying was unsuccessful.
+
+## Project Save and Open
+
+- Provide **Save Project** and **Open Project** actions in a **File** menu.
+- Support `Ctrl+S` for Save Project and `Ctrl+O` for Open Project.
+- Save projects as a JSON-based `.cppj` file with format and version metadata.
+- Save all project inputs, including:
+  - Slab mode
+  - Typed length and width
+  - Slab thickness
+  - Optional concrete mix name or designation
+  - Waste allowance
+  - Truck capacity
+  - One-way travel time
+  - Placement rate
+  - Washout and reload time
+  - First-truck arrival time
+  - Concrete price
+  - Optional short-load fee
+  - Available working time
+- Save the completed outline or shape as geographic coordinates.
+- Save the map position and zoom level and the window geometry.
+- Save derived quantities as project metadata when available; reopening must recalculate from saved inputs and restore the same values.
+- Opening a saved project must restore every saved input and the active slab outline or typed shape.
+- Invalid, unsupported, or corrupted project files must show an error and leave the current project unchanged.
 
 ## Cost Estimator
 
@@ -456,7 +482,6 @@ For a `50 cy` order with `10 cy` truck capacity:
 - Pump trucks
 - Weather
 - Detailed scheduling beyond truck sequencing
-- Saving plans
 - Printing or PDF export
 - Unit conversion
 - Geocoding

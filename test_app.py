@@ -1,4 +1,7 @@
 import unittest
+import json
+import tempfile
+import os
 
 from app import (
     geographic_area,
@@ -8,6 +11,8 @@ from app import (
     format_clock_time,
     format_duration,
     format_schedule_time,
+    serialize_project,
+    deserialize_project,
 )
 
 
@@ -139,6 +144,67 @@ class CalculationTests(unittest.TestCase):
                          (True, 0))
         self.assertEqual(check_working_time(9, small["pour_duration_minutes"]),
                          (False, 1))
+
+    def test_project_save_round_trip(self):
+        project = {
+            "mode": "draw",
+            "inputs": {
+                "length": "40",
+                "width": "60",
+                "thickness": "6",
+                "mix": "4000 psi",
+                "waste": "5",
+                "capacity": "10",
+                "price": "150",
+                "fee": "75",
+                "travel": "20",
+                "placement": "30",
+                "available": "100",
+                "washout": "10",
+                "arrival": "07:00",
+            },
+            "completed_corners": [
+                [40.2500, -111.6500],
+                [40.2510, -111.6500],
+                [40.2510, -111.6490],
+                [40.2500, -111.6490],
+            ],
+            "draft_corners": [],
+            "map_position": [40.2508, -111.6493],
+            "map_zoom": 15,
+            "window_geometry": "1180x820+0+0",
+            "quantities": {"ordered_volume": 47.0, "truckloads": 5},
+        }
+        text = serialize_project(project)
+        path = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".cppj", delete=False, encoding="utf-8"
+            ) as project_file:
+                project_file.write(text)
+                path = project_file.name
+            with open(path, "r", encoding="utf-8") as project_file:
+                restored = deserialize_project(project_file.read())
+        finally:
+            if path:
+                os.unlink(path)
+
+        self.assertEqual(restored["mode"], "draw")
+        self.assertEqual(restored["inputs"]["mix"], "4000 psi")
+        self.assertEqual(restored["inputs"]["arrival"], "07:00")
+        self.assertEqual(restored["completed_corners"], project["completed_corners"])
+        self.assertEqual(restored["map_position"], [40.2508, -111.6493])
+        self.assertEqual(restored["quantities"]["ordered_volume"], 47.0)
+
+    def test_project_rejects_wrong_format_and_missing_inputs(self):
+        with self.assertRaises(ValueError):
+            deserialize_project(json.dumps({"format": "other", "version": 1}))
+        with self.assertRaises(ValueError):
+            deserialize_project(json.dumps({
+                "format": "ConcretePourPlanner",
+                "version": 1,
+                "mode": "typed",
+            }))
 
 
 if __name__ == "__main__":

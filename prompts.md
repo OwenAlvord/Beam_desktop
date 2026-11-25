@@ -15,3 +15,9 @@
 - Asked: Run all validation cases in spec.md against the app calculations and report expected versus actual values.
 - Changed: Added a reusable set-time calculation function and expanded test_app.py to cover 40 ft x 60 ft volume details, all arrivals and truck assignments, cost cases, set-time thresholds, geographic area, 20 ft x 20 ft results, midnight rollover, and blank/full-load fees.
 - Worked: Yes. All 8 comprehensive unit tests pass, and the direct validation report shows every named numeric value matching the specification.
+
+## 2026-11-24
+
+- Asked: Add Save and Open to the Concrete Pour Planner desktop app using a File menu, remove saving restrictions from spec.md, save all project inputs including mix and shape, restore saved projects, and rerun validation cases.
+- Changed: Added a File menu with Save/Open and Ctrl+S/Ctrl+O actions, JSON .cppj project serialization and validation, a concrete mix input, project restore for all input fields and slab mode/outline/map/window settings, and project save/open round-trip tests. Updated spec.md to document project saving and remove saving from Out of Scope.
+- Worked: Yes. Ten tests pass, including project round-trip and format validation, syntax checks pass, and a real app-instance smoke check restored mix, dimensions, typed mode, and recalculated output correctly.

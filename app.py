@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import math
+import json
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, filedialog, messagebox
 from typing import Callable, Optional
 
 try:
@@ -93,6 +94,28 @@ def estimate_cost(
 def check_working_time(available_minutes: float, pour_duration_minutes: float) -> tuple[bool, float]:
     remaining = available_minutes - pour_duration_minutes
     return remaining >= 0, remaining if remaining >= 0 else abs(remaining)
+
+
+def serialize_project(project: dict) -> str:
+    payload = dict(project)
+    payload["format"] = "ConcretePourPlanner"
+    payload["version"] = 1
+    return json.dumps(payload, indent=2, ensure_ascii=False)
+
+
+def deserialize_project(text: str) -> dict:
+    project = json.loads(text)
+    if not isinstance(project, dict):
+        raise ValueError("Project file must contain a JSON object.")
+    if project.get("format") != "ConcretePourPlanner":
+        raise ValueError("This file is not a Concrete Pour Planner project.")
+    if project.get("version") != 1:
+        raise ValueError("This project format version is not supported.")
+    if not isinstance(project.get("inputs"), dict):
+        raise ValueError("Project inputs are missing or invalid.")
+    if project.get("mode") not in ("typed", "draw"):
+        raise ValueError("Project slab mode is invalid.")
+    return project
 
 
 def format_duration(total_minutes: float) -> str:
@@ -238,6 +261,7 @@ class ConcretePourApp(tk.Tk):
         self._build_scroll_layout()
         self._build_map_and_inputs()
         self._build_outputs()
+        self._build_file_menu()
 
         self.bind_all("<Control-c>", lambda event: None)
         self.after(100, self.enter_typed_mode)
@@ -375,6 +399,7 @@ class ConcretePourApp(tk.Tk):
             ("length", "Length (ft)", "40"),
             ("width", "Width (ft)", "60"),
             ("thickness", "Slab thickness (in)", "6"),
+            ("mix", "Concrete mix", ""),
             ("waste", "Waste allowance (%)", "5"),
             ("capacity", "Truck capacity (cy)", "10"),
             ("price", "Concrete price (USD/cy)", ""),
@@ -496,6 +521,145 @@ class ConcretePourApp(tk.Tk):
         self.copy_status = tk.Label(action, text="", background="#ffffff",
                                     foreground=MUTED, font=("Segoe UI", 9))
         self.copy_status.pack(side="left", padx=(10, 0))
+
+    def _build_file_menu(self) -> None:
+        menubar = tk.Menu(self)
+        file_menu = tk.Menu(menubar, tearoff=False)
+        file_menu.add_command(label="Save Project...", command=self.save_project,
+                              accelerator="Ctrl+S")
+        file_menu.add_command(label="Open Project...", command=self.open_project,
+                              accelerator="Ctrl+O")
+        menubar.add_cascade(label="File", menu=file_menu)
+        self.configure(menu=menubar)
+        self.bind_all("<Control-s>", lambda event: self.save_project())
+        self.bind_all("<Control-o>", lambda event: self.open_project())
+
+    def _get_project_data(self) -> dict:
+        inputs = {key: entry.get() for key, entry in self.inputs.items()}
+        if tkintermapview:
+            try:
+                map_lat, map_lon = self.map.get_position()
+                map_zoom = self.map.zoom
+            except Exception:
+                map_lat, map_lon, map_zoom = 40.2508, -111.6493, 15
+        else:
+            map_lat, map_lon, map_zoom = 40.2508, -111.6493, 15
+        calculation = self.current_calculation or {}
+        return {
+            "mode": self.mode,
+            "inputs": inputs,
+            "completed_corners": [
+                [lat, lon] for lat, lon in self.completed_corners
+            ],
+            "draft_corners": [
+                [lat, lon] for lat, lon in self.draft_corners
+            ],
+            "map_position": [map_lat, map_lon],
+            "map_zoom": map_zoom,
+            "window_geometry": self.geometry(),
+            "quantities": calculation,
+        }
+
+    def save_project(self) -> None:
+        path = filedialog.asksaveasfilename(
+            title="Save Concrete Pour Project",
+            defaultextension=".cppj",
+            filetypes=[("Concrete Pour Project", "*.cppj"),
+                       ("JSON file", "*.json"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        try:
+            with open(path, "w", encoding="utf-8") as project_file:
+                project_file.write(serialize_project(self._get_project_data()))
+        except (OSError, TypeError, ValueError) as error:
+            messagebox.showerror("Save Failed",
+                                 f"The project could not be saved.\n\n{error}")
+            return
+        self.title(f"Concrete Pour Planner - {path}")
+        self.copy_status.configure(text="Project saved.")
+        self.after(2500, lambda: self.copy_status.configure(text=""))
+
+    def open_project(self) -> None:
+        path = filedialog.askopenfilename(
+            title="Open Concrete Pour Project",
+            filetypes=[("Concrete Pour Project", "*.cppj"),
+                       ("JSON file", "*.json"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as project_file:
+                project = deserialize_project(project_file.read())
+        except (OSError, json.JSONDecodeError, ValueError) as error:
+            messagebox.showerror("Open Failed",
+                                 f"The project could not be opened.\n\n{error}")
+            return
+        self._restore_project(project)
+        self.title(f"Concrete Pour Planner - {path}")
+        self.copy_status.configure(text="Project opened.")
+        self.after(2500, lambda: self.copy_status.configure(text=""))
+
+    def _restore_project(self, project: dict) -> None:
+        inputs = project["inputs"]
+        for key, entry in self.inputs.items():
+            entry.delete(0, "end")
+            if key in inputs:
+                entry.insert(0, str(inputs[key]))
+
+        self.mode = project["mode"]
+        self.drawing = False
+        self.draft_corners = []
+        if hasattr(self, "draft_markers"):
+            for marker in self.draft_markers:
+                marker.delete() if hasattr(marker, "delete") else None
+        self.draft_markers = []
+        self.completed_corners = [
+            (float(lat), float(lon))
+            for lat, lon in project.get("completed_corners", [])
+        ]
+
+        map_position = project.get("map_position")
+        map_zoom = project.get("map_zoom")
+        window_geometry = project.get("window_geometry")
+        if isinstance(window_geometry, str):
+            try:
+                self.geometry(window_geometry)
+            except tk.TclError:
+                pass
+        if tkintermapview and map_position:
+            try:
+                self.map.set_position(float(map_position[0]), float(map_position[1]))
+                if isinstance(map_zoom, (int, float)):
+                    self.map.set_zoom(int(map_zoom))
+            except (TypeError, ValueError, IndexError):
+                pass
+
+        if tkintermapview:
+            for marker in self.completed_markers:
+                marker.delete()
+            self.completed_markers = []
+            if self.polygon:
+                self.polygon.delete()
+                self.polygon = None
+
+        if self.mode == "typed":
+            self.draw_mode_button.configure(style="Secondary.TButton")
+            self.typed_mode_button.configure(style="Accent.TButton")
+            self.draw_typed_rectangle()
+        else:
+            self.draw_mode_button.configure(style="Accent.TButton")
+            self.typed_mode_button.configure(style="Secondary.TButton")
+            self.draw_button.configure(text="Draw slab")
+            if len(self.completed_corners) >= 3:
+                self.show_completed_polygon()
+            else:
+                self.completed_corners = []
+                self.current_slab_area = None
+                self.clear_calculated_outputs()
+                self.map_label.configure(text="")
+                self.hint.configure(text="Choose Draw slab and click at least three corners.")
+                self.update_all()
 
     def on_input_changed(self, key: str) -> None:
         if key in ("length", "width") and self.mode == "typed":
@@ -966,6 +1130,9 @@ class ConcretePourApp(tk.Tk):
             f'{calculation["ordered_volume"]:.1f} cy concrete',
             f"{truckloads} {'load' if truckloads == 1 else 'loads'}:",
         ]
+        mix = self.inputs["mix"].get().strip()
+        if mix:
+            lines.insert(1, f"Concrete mix: {mix}")
         for index in range(truckloads):
             load_size = final_load if index == truckloads - 1 else capacity
             truck_number = index % rotation + 1
